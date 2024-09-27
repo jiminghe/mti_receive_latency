@@ -1,4 +1,4 @@
-TARGETS:= example_mti_receive_data example_mti_parse_logfile
+TARGETS:= mti_receive
 OBJLIBS	= xspublic
 INCLUDE=-I. -Ixspublic
 CFLAGS=-g $(INCLUDE)
@@ -11,8 +11,8 @@ all : $(OBJLIBS) $(TARGETS)
 xspublic :
 	$(MAKE) -C xspublic $(MFLAGS)
 
-example_mti_receive_data: example_mti_receive_data.cpp.o
-example_mti_parse_logfile: example_mti_parse_logfile.cpp.o
+mti_receive: example_mti_receive_data.cpp.o
+
 
 $(TARGETS):
 	$(CXX) $(CFLAGS) $(INCLUDE) $^ -o $@ $(LFLAGS)
@@ -22,7 +22,7 @@ $(TARGETS):
 
 clean :
 	-$(RM) $(OBJECTS) $(TARGETS)
-	-$(RM) *.o
+	-$(RM) *.o *.dpp *.d
 	-$(MAKE) -C xspublic/xscontroller $(MFLAGS) clean
 	-$(MAKE) -C xspublic/xscommon $(MFLAGS) clean
 	-$(MAKE) -C xspublic/xstypes $(MFLAGS) clean

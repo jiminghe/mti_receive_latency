@@ -1,3 +1,10 @@
 *.o
 *.dpp
 *.d
+*.a
+*.csv
+*.mtb
+example_mti_parse_logfile
+example_mti_receive_data
+/venv/
+mti_receive

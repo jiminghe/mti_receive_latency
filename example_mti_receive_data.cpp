@@ -1,38 +1,3 @@
-
-//  Copyright (c) 2003-2024 Movella Technologies B.V. or subsidiaries worldwide.
-//  All rights reserved.
-//  
-//  Redistribution and use in source and binary forms, with or without modification,
-//  are permitted provided that the following conditions are met:
-//  
-//  1.	Redistributions of source code must retain the above copyright notice,
-//  	this list of conditions, and the following disclaimer.
-//  
-//  2.	Redistributions in binary form must reproduce the above copyright notice,
-//  	this list of conditions, and the following disclaimer in the documentation
-//  	and/or other materials provided with the distribution.
-//  
-//  3.	Neither the names of the copyright holders nor the names of their contributors
-//  	may be used to endorse or promote products derived from this software without
-//  	specific prior written permission.
-//  
-//  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
-//  EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
-//  MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL
-//  THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-//  SPECIAL, EXEMPLARY OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
-//  OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
-//  HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY OR
-//  TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-//  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.THE LAWS OF THE NETHERLANDS 
-//  SHALL BE EXCLUSIVELY APPLICABLE AND ANY DISPUTES SHALL BE FINALLY SETTLED UNDER THE RULES 
-//  OF ARBITRATION OF THE INTERNATIONAL CHAMBER OF COMMERCE IN THE HAGUE BY ONE OR MORE 
-//  ARBITRATORS APPOINTED IN ACCORDANCE WITH SAID RULES.
-//  
-
-//--------------------------------------------------------------------------------
-// Public Xsens device API C++ example MTi receive data.
-//--------------------------------------------------------------------------------
 #include <xscontroller/xscontrol_def.h>
 #include <xscontroller/xsdevice_def.h>
 #include <xscontroller/xsscanner.h>
@@ -46,9 +11,68 @@
 #include <list>
 #include <string>
 
+#include <fstream>
+#include <vector>
+#include <sstream>
+#include <time.h>   // For clock_gettime
+#include <stdint.h> // For int64_t
+
 Journaller* gJournal = 0;
 
 using namespace std;
+
+
+
+
+double getCurrentUTCTime()
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts); // Get the current time
+
+    // Convert seconds and nanoseconds to a double representing seconds
+    return static_cast<double>(ts.tv_sec) + static_cast<double>(ts.tv_nsec) / 1e9;
+}
+
+
+
+// Structure to hold logged data
+struct LogEntry {
+    double utcTimestamp;
+	uint32_t sampleTimeFine;
+    double accX, accY, accZ;
+    double gyroX, gyroY, gyroZ;
+    double q0, q1, q2, q3;
+};
+
+// Store log entries in a vector
+std::vector<LogEntry> logEntries;
+
+void writeLogToCSV(const std::string& filename) {
+    std::ofstream file(filename);
+    if (!file.is_open()) return;
+
+    // Write the header
+    file << "UTC_Timestamp,SampleTimeFine,Acc_X,Acc_Y,Acc_Z,Gyro_X,Gyro_Y,Gyro_Z,Q0,Q1,Q2,Q3\n";
+
+    // Write each log entry
+    for (const auto& entry : logEntries) {
+        file << std::fixed << std::setprecision(6)
+             << entry.utcTimestamp << ","
+			 << entry.sampleTimeFine << ","
+             << entry.accX << ","
+             << entry.accY << ","
+             << entry.accZ << ","
+             << entry.gyroX << ","
+             << entry.gyroY << ","
+             << entry.gyroZ << ","
+             << entry.q0 << ","
+             << entry.q1 << ","
+             << entry.q2 << ","
+             << entry.q3 << "\n";
+    }
+
+    file.close();
+}
 
 class CallbackHandler : public XsCallback
 {
@@ -84,6 +108,26 @@ protected:
 	{
 		xsens::Lock locky(&m_mutex);
 		assert(packet != 0);
+
+		// Collect data
+		if (packet->containsSampleTimeFine() && packet->containsCalibratedData() && packet->containsOrientation()) {
+			LogEntry entry;
+			entry.utcTimestamp = getCurrentUTCTime(); // using Ubuntu native method to get time.
+			entry.sampleTimeFine = packet->sampleTimeFine();
+			entry.accX = packet->calibratedAcceleration()[0];
+			entry.accY = packet->calibratedAcceleration()[1];
+			entry.accZ = packet->calibratedAcceleration()[2];
+			entry.gyroX = packet->calibratedGyroscopeData()[0];
+			entry.gyroY = packet->calibratedGyroscopeData()[1];
+			entry.gyroZ = packet->calibratedGyroscopeData()[2];
+			entry.q0 = packet->orientationQuaternion().w();
+			entry.q1 = packet->orientationQuaternion().x();
+			entry.q2 = packet->orientationQuaternion().y();
+			entry.q3 = packet->orientationQuaternion().z();
+
+			logEntries.push_back(entry);
+		}
+
 		while (m_numberOfPacketsInBuffer >= m_maxNumberOfPacketsInBuffer)
 			(void)getNextPacket();
 
@@ -163,6 +207,7 @@ int main(void)
 	XsOutputConfigurationArray configArray;
 	configArray.push_back(XsOutputConfiguration(XDI_PacketCounter, 0));
 	configArray.push_back(XsOutputConfiguration(XDI_SampleTimeFine, 0));
+	configArray.push_back(XsOutputConfiguration(XDI_StatusWord, 0));
 
 	if (device->deviceId().isImu())
 	{
@@ -172,10 +217,16 @@ int main(void)
 	}
 	else if (device->deviceId().isVru() || device->deviceId().isAhrs())
 	{
-		configArray.push_back(XsOutputConfiguration(XDI_Quaternion, 100));
+		configArray.push_back(XsOutputConfiguration(XDI_Acceleration, 400));
+		configArray.push_back(XsOutputConfiguration(XDI_RateOfTurn, 400));
+		configArray.push_back(XsOutputConfiguration(XDI_MagneticField, 100));
+		configArray.push_back(XsOutputConfiguration(XDI_Quaternion, 400));
 	}
 	else if (device->deviceId().isGnss())
 	{
+		configArray.push_back(XsOutputConfiguration(XDI_Acceleration, 100));
+		configArray.push_back(XsOutputConfiguration(XDI_RateOfTurn, 100));
+		configArray.push_back(XsOutputConfiguration(XDI_MagneticField, 100));
 		configArray.push_back(XsOutputConfiguration(XDI_Quaternion, 100));
 		configArray.push_back(XsOutputConfiguration(XDI_LatLon, 100));
 		configArray.push_back(XsOutputConfiguration(XDI_AltitudeEllipsoid, 100));
@@ -216,6 +267,14 @@ int main(void)
 
 			// Retrieve a packet
 			XsDataPacket packet = callback.getNextPacket();
+
+			if(packet.containsSampleTimeFine())
+			{
+				uint32_t sampleTimeFine = packet.sampleTimeFine();
+
+			}
+
+
 			if (packet.containsCalibratedData())
 			{
 				XsVector acc = packet.calibratedAcceleration();
@@ -282,6 +341,8 @@ int main(void)
 	cout << "Closing log file..." << endl;
 	if (!device->closeLogFile())
 		return handleError("Failed to close log file. Aborting.");
+
+	writeLogToCSV("data_log.csv");
 
 	cout << "Closing port..." << endl;
 	control->closePort(mtPort.portName().toStdString());
