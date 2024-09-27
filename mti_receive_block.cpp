@@ -1,6 +1,7 @@
 #include <iostream>
 #include <boost/asio.hpp>
 #include <boost/bind/bind.hpp>
+#include <boost/asio/serial_port_base.hpp>
 #include <array>
 #include <vector>
 #include <iomanip>
@@ -12,8 +13,20 @@
 #include <termios.h>
 #include <sys/ioctl.h>
 #include <atomic>
+#include <pthread.h>  // Required for pthread_setaffinity_np
 
 using namespace boost::asio;
+
+// Function to set thread affinity to a specific CPU core
+void setThreadAffinity(std::thread& th, int core_id) {
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    int rc = pthread_setaffinity_np(th.native_handle(), sizeof(cpu_set_t), &cpuset);
+    if (rc != 0) {
+        std::cerr << "Error setting thread affinity: " << strerror(rc) << std::endl;
+    }
+}
 
 // Function to set low latency mode on the serial port
 void setLowLatencyMode(serial_port& serial) {
@@ -80,6 +93,7 @@ public:
         timer_.async_wait(boost::bind(&SerialReader::handle_timer, this));
         // Run the io_service in a separate thread
         io_thread_ = std::thread([this]() { io_.run(); });
+        setThreadAffinity(io_thread_, 1);  // Set thread affinity to CPU core 1
     }
 
     void join() {
@@ -178,7 +192,7 @@ private:
     int duration_seconds_;
     std::thread io_thread_;
     std::chrono::steady_clock::time_point start_time_;
-    std::array<char, 512> buf_;
+    std::array<char, 1024> buf_;
     std::vector<uint8_t> data_buffer_;
     std::vector<double> utc_timestamps_;
 };

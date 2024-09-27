@@ -1,4 +1,4 @@
 /venv/
 /plot_html/
 mti_receive_nblock
-*.csv
+data_log.csv
