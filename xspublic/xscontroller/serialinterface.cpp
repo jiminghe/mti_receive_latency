@@ -444,16 +444,7 @@ XsResultValue SerialInterface::open(const XsPortInfo& portInfo,
 	// O_NOCTTY: Raw input, no "controlling terminal"
 	// O_NDELAY: Don't care about DCD signal
 
-	// Set low latency mode
-	struct serial_struct serinfo;
-	if (ioctl(m_handle, TIOCGSERIAL, &serinfo) < 0) {
-		JLDEBUGG("TIOCGSERIAL failed");
-	} else {
-		serinfo.flags |= ASYNC_LOW_LATENCY;
-		if (ioctl(m_handle, TIOCSSERIAL, &serinfo) < 0) {
-			JLDEBUGG("TIOCSSERIAL failed");
-		}
-	}
+
 
 	if (m_handle < 0)
 	{
@@ -469,6 +460,17 @@ XsResultValue SerialInterface::open(const XsPortInfo& portInfo,
 	}
 
 	/* Start configuring of port for non-canonical transfer mode */
+	// Set low latency mode
+	struct serial_struct serinfo;
+	if (ioctl(m_handle, TIOCGSERIAL, &serinfo) < 0) {
+		JLDEBUGG("TIOCGSERIAL failed");
+	} else {
+		serinfo.flags |= ASYNC_LOW_LATENCY;
+		if (ioctl(m_handle, TIOCSSERIAL, &serinfo) < 0) {
+			JLDEBUGG("TIOCSSERIAL failed");
+		}
+	}
+
 	// Get current options for the port
 	if (tcgetattr(m_handle, &m_commState) != 0)
 		return XRV_ERROR;
