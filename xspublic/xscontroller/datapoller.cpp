@@ -90,11 +90,10 @@ DataPoller::~DataPoller()
 /*! \brief Conjure up the time to wait based on properties of the received data (like the length) */
 int32_t DataPoller::conjureUpWaitTime(const XsByteArray& bytes) const
 {
-	if (bytes.size() == 0)
-		return 3;
-	else if (bytes.size() < 256)
-		return 2;
-	return 0;
+    if (bytes.size() == 0)
+        return 1; // Reduce wait time when no data is received
+    else
+        return 0; // No wait when any data is received
 }
 
 /*! \brief Init function for the thread, sets the priority higher

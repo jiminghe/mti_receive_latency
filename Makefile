@@ -3,6 +3,13 @@ OBJLIBS	= xspublic
 INCLUDE=-I. -Ixspublic
 CFLAGS=-g $(INCLUDE)
 CXXFLAGS=-std=c++11 $(CFLAGS)
+CFLAGS += -g
+CXXFLAGS += -g
+
+# Ensure subdirectories inherit these flags
+export CFLAGS
+export CXXFLAGS
+
 LFLAGS=-Lxspublic/xscontroller -Lxspublic/xscommon -Lxspublic/xstypes -lxscontroller -lxscommon -lxstypes -lpthread -lrt -ldl
 
 .PHONY: $(OBJLIBS)
